@@ -701,7 +701,7 @@ function trySensorsAutomatic() {
 // GPS-based step fallback (when accelerometer fails)
 let lastLat = null, lastLon = null;
 let gpsSteps = 0;
-const GPS_STEP_DISTANCE = 2.0; // meters per step
+const GPS_STEP_DISTANCE = 0.5; // meters per step
 let gpsWatchId = null;
 
 function startGPSFallback() {
