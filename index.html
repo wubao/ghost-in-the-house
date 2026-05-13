@@ -353,6 +353,7 @@
       <div id="motionStatus">STAND STILL</div>
       <div id="stepCounter">0</div>
       <div id="stepLabel">STEPS</div>
+	  <button onclick="manualStep()" style="font-size:6px;padding:3px;">➕ Manually Step</button>
     </div>
     <!-- Mini map -->
     <div id="miniMapArea">
@@ -488,8 +489,8 @@ let motion = {
   movingTimer: 0,
 
   // Settings
-  stepThreshold: 10.5,   // m/s² peak to count as step (adjust per device)
-  stepSize:      0.10,   // world units per step
+  stepThreshold: 6.0,   // m/s² peak to count as step (adjust per device)
+  stepSize:      0.25,   // world units per step
   smoothAlpha:   0.15,   // compass smoothing
 };
 
@@ -536,7 +537,9 @@ function updateCompassUI(deg) {
 
 // ── Step Detection ──
 function initAccelerometer() {
-  window.addEventListener("devicemotion", e => {
+window.addEventListener("devicemotion", e => {
+  motionEventCount++;
+  if (motionEventCount % 50 === 0) console.log("devicemotion count:", motionEventCount);
     let acc = e.accelerationIncludingGravity;
     if (!acc || acc.x === null) return;
 
@@ -551,12 +554,17 @@ function initAccelerometer() {
     let lay = acc.y - motion.gravity.y;
     let laz = acc.z - motion.gravity.z;
 
-    let mag = Math.sqrt(lax*lax + lay*lay + laz*laz);
+    let mag = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
+// Debug: show live magnitude
+document.getElementById("mb-accel").textContent = `📳 ${mag.toFixed(1)}`;
 
     // Step detection: rising edge above threshold
     let now = Date.now();
-    if (motion.prevMag < motion.stepThreshold && mag >= motion.stepThreshold &&
-        now - motion.lastStepTime > motion.stepCooldown) {
+    // Temporary: lower threshold to 6.0 for testing
+let effectiveThreshold = 6.0;
+if (motion.prevMag < effectiveThreshold && mag >= effectiveThreshold &&
+    now - motion.lastStepTime > motion.stepCooldown) {
+      console.log(`STEP DETECTED! mag=${mag.toFixed(1)}`);
       motion.stepPending = true;
       motion.lastStepTime = now;
       motion.isMoving = true;
@@ -583,6 +591,11 @@ function applyPhysicalStep() {
 
   if (!isWall(nx, player.y)) player.x = nx;
   if (!isWall(player.x, ny)) player.y = ny;
+  
+  // Flash the step counter briefly (optional)
+  let stepElem = document.getElementById("stepCounter");
+  stepElem.style.color = "#ffaa00";
+  setTimeout(() => stepElem.style.color = "#00ff41", 100);
 }
 
 // ── Keyboard fallback (desktop testing) ──
@@ -662,15 +675,15 @@ function requestSensorPermission() {
 }
 
 function trySensorsAutomatic() {
-  // Android / non-iOS doesn't require explicit permission
+  // On iOS, never auto-init – always require explicit tap
   if (typeof DeviceOrientationEvent !== "undefined" &&
-      typeof DeviceOrientationEvent.requestPermission !== "function") {
-    initCompass();
-    initAccelerometer();
-    sensorsInitialised = true;
-    return true;
+      typeof DeviceOrientationEvent.requestPermission === "function") {
+    return false; // iOS needs user tap
   }
-  return false;
+  initCompass();
+  initAccelerometer();
+  sensorsInitialised = true;
+  return true;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1414,6 +1427,11 @@ trySensorsAutomatic();
 if (window.location.hash.includes("ghostmap=")) {
   document.getElementById("modeSelectOverlay").style.display="flex";
   showTip("GHOST HUNT LINK DETECTED — TAP HUNTER MODE!");
+}
+
+function manualStep() {
+  motion.stepPending = true;
+  showTip("Manual step added");
 }
 </script>
 </body>
