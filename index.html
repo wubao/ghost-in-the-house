@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<title>Ghost In The House</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Press Start 2P', monospace, sans-serif;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #gameContainer {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* ── TOP HUD ── */
+  #hud {
+    background: #0a0a0a;
+    border-bottom: 2px solid #333;
+    padding: 5px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    gap: 4px;
+    z-index: 10;
+  }
+  #hud-title { color: #00ff41; font-size: 8px; text-shadow: 0 0 8px #00ff41; letter-spacing: 1px; }
+  #hud-timer { font-size: 17px; color: #ffff00; text-shadow: 0 0 10px #ffff00; text-align: center; min-width: 76px; }
+  #hud-timer.urgent { color: #ff3300; text-shadow: 0 0 10px #ff3300; animation: blink .5s infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+  #hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  #hud-floor { color: #aaa; font-size: 7px; }
+  #hud-health { display: flex; gap: 3px; }
+  .heart { font-size: 11px; }
+  .heart.empty { filter: grayscale(1) brightness(.4); }
+  #hud-mode { color: #00ff41; font-size: 7px; text-shadow: 0 0 5px #00ff41; }
+  #hud-obj { color: #aaa; font-size: 7px; }
+
+  /* ── GAME VIEW ── */
+  #viewArea {
+    flex: 1 1 auto;
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+  }
+  #gameCanvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+  /* ── OVERLAYS ── */
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 14px; z-index: 30;
+  }
+
+  /* Mode select */
+  #modeSelectOverlay { background: rgba(0,0,0,.96); }
+  #modeSelectOverlay h1 { color: #00ff41; font-size: 12px; text-shadow: 0 0 12px #00ff41; text-align: center; line-height: 1.8; }
+  #modeSelectOverlay p { color: #888; font-size: 6px; text-align: center; line-height: 1.8; }
+  .mode-btn {
+    width: 240px; padding: 12px 8px;
+    background: #0f0f0f; border: 2px solid #444;
+    color: #fff; font-family: 'Press Start 2P', monospace; font-size: 8px;
+    cursor: pointer; text-align: center; line-height: 1.8; letter-spacing: .5px;
+  }
+  .mode-btn:active { background: #222; border-color: #00ff41; }
+  .mode-btn span { display: block; font-size: 6px; color: #888; margin-top: 4px; }
+
+  /* Scan overlay */
+  #scanOverlay { background: rgba(0,0,0,.78); }
+  #scanOverlay h2 { color: #00ff41; font-size: 10px; text-shadow: 0 0 10px #00ff41; text-align: center; line-height: 2; }
+  #scanOverlay p { color: #aaa; font-size: 6px; text-align: center; line-height: 1.8; max-width: 260px; }
+  #scanCountdown { color: #ffff00; font-size: 26px; text-shadow: 0 0 15px #ffff00; }
+  #scanProgress { width: 200px; height: 8px; background: #222; border: 1px solid #444; }
+  #scanBar { height: 100%; background: #00ff41; width: 0%; transition: width .1s; }
+
+  /* Ghost hiding screen */
+  #ghostHideOverlay { background: #000; display: none; }
+  #ghostHideOverlay.show { display: flex; }
+  #ghostHideOverlay h2 { color: #ff4400; font-size: 11px; text-shadow: 0 0 12px #ff4400; text-align: center; line-height: 1.8; }
+  #ghostHideOverlay p { color: #888; font-size: 6px; text-align: center; line-height: 2; max-width: 260px; }
+  #foundBtn {
+    width: 240px; padding: 18px 8px; margin-top: 8px;
+    background: #1a0000; border: 3px solid #ff2200;
+    color: #ff2200; font-family: 'Press Start 2P', monospace; font-size: 10px;
+    cursor: pointer; text-align: center; letter-spacing: 1px;
+    animation: pulse-red 1s infinite;
+  }
+  @keyframes pulse-red { 0%,100%{box-shadow:0 0 10px #ff2200} 50%{box-shadow:0 0 30px #ff2200} }
+  #foundBtn:active { background: #330000; }
+  #shareBtn {
+    width: 240px; padding: 10px 8px;
+    background: #001a00; border: 2px solid #00aa00;
+    color: #00ff41; font-family: 'Press Start 2P', monospace; font-size: 7px;
+    cursor: pointer; text-align: center; letter-spacing: .5px;
+  }
+  #shareBtn:active { background: #003300; }
+
+  /* Game over */
+  #gameOverOverlay { background: rgba(0,0,0,.92); display: none; }
+  #gameOverOverlay.show { display: flex; }
+  #gameOverTitle { font-size: 17px; text-align: center; line-height: 1.5; }
+  #gameOverTitle.caught { color: #ff2200; text-shadow: 0 0 20px #ff0000; }
+  #gameOverTitle.win { color: #00ff41; text-shadow: 0 0 20px #00ff41; }
+  #gameOverMsg { color: #aaa; font-size: 7px; text-align: center; }
+  #restartBtn {
+    margin-top: 8px; background: #1a1a1a; border: 2px solid #555;
+    color: #fff; font-family: 'Press Start 2P', monospace; font-size: 8px;
+    padding: 10px 20px; cursor: pointer; letter-spacing: 1px;
+  }
+  #restartBtn:active { background: #333; }
+
+  /* Alert banner */
+  #alertBanner {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(180,0,0,.92); border: 2px solid #ff0000;
+    color: #fff; font-size: 8px; padding: 7px 12px; letter-spacing: 1px;
+    display: none; align-items: center; gap: 8px; white-space: nowrap;
+    text-shadow: 1px 1px 0 #000; z-index: 20;
+  }
+  #alertBanner.show { display: flex; }
+
+  /* Door status */
+  #doorStatus {
+    position: absolute; bottom: 8px; right: 8px;
+    background: rgba(0,0,0,.85); border: 1px solid #555;
+    color: #ffcc00; font-size: 7px; padding: 5px 8px;
+    display: none; gap: 6px; align-items: center; z-index: 20;
+  }
+  #doorStatus.show { display: flex; }
+
+  /* Motion debug badge */
+  #motionBadge {
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(0,0,0,.7); border: 1px solid #333;
+    color: #555; font-size: 6px; padding: 4px 6px;
+    display: flex; flex-direction: column; gap: 3px; z-index: 15;
+    pointer-events: none;
+  }
+  #motionBadge.active { color: #00ff41; border-color: #00ff41; }
+
+  /* ── BOTTOM PANEL (no dpad) ── */
+  #bottomPanel {
+    background: #0a0a0a;
+    border-top: 2px solid #333;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex-shrink: 0;
+    height: 160px;
+  }
+
+  /* Motion status panel */
+  #motionPanel {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-right: 1px solid #222;
+  }
+  #stepCounter { color: #00ff41; font-size: 14px; text-shadow: 0 0 8px #00ff41; }
+  #stepLabel { color: #555; font-size: 6px; }
+  #compassRose {
+    width: 60px; height: 60px;
+    border: 2px solid #333; border-radius: 50%;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #compassNeedle {
+    position: absolute;
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 26px solid #ff3300;
+    transform-origin: bottom center;
+    top: 2px; left: 50%; margin-left: -4px;
+    transition: transform .15s ease;
+  }
+  #compassSouth {
+    position: absolute;
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 26px solid #333;
+    transform-origin: top center;
+    bottom: 2px; left: 50%; margin-left: -4px;
+  }
+  .compass-label { position: absolute; font-size: 5px; color: #555; }
+  .compass-label.n { top: 2px; }
+  .compass-label.s { bottom: 2px; }
+  .compass-label.e { right: 3px; }
+  .compass-label.w { left: 3px; }
+  #motionStatus { color: #555; font-size: 6px; text-align: center; }
+  #motionStatus.moving { color: #00ff41; }
+
+  /* Mini map */
+  #miniMapArea {
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  #miniMapLabel { color: #888; font-size: 6px; text-align: center; }
+  #miniMapCanvas { flex: 1; width: 100%; image-rendering: pixelated; border: 1px solid #333; }
+
+  /* Tip bar */
+  #tipBar {
+    background: #111; border-top: 1px solid #333;
+    padding: 5px 10px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0; gap: 8px;
+  }
+  #tipText { color: #ffcc00; font-size: 6px; display: flex; align-items: center; gap: 6px; }
+  #doorLockBtn {
+    background: #1c1c1c; border: 1px solid #555; color: #ffcc00;
+    font-family: 'Press Start 2P', monospace; font-size: 6px;
+    padding: 5px 8px; cursor: pointer; white-space: nowrap;
+  }
+  #doorLockBtn:active { background: #333; }
+
+  /* Permission prompt */
+  #permOverlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,.95);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; z-index: 50;
+  }
+  #permOverlay.show { display: flex; }
+  #permOverlay h3 { color: #ffff00; font-size: 9px; text-align: center; line-height: 1.8; }
+  #permOverlay p { color: #888; font-size: 6px; text-align: center; max-width: 260px; line-height: 1.8; }
+  #permBtn {
+    background: #001a00; border: 2px solid #00aa00;
+    color: #00ff41; font-family: 'Press Start 2P', monospace; font-size: 8px;
+    padding: 12px 20px; cursor: pointer; letter-spacing: 1px;
+  }
+  #permBtn:active { background: #003300; }
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+
+  <!-- HUD -->
+  <div id="hud">
+    <div>
+      <div id="hud-title">GHOST IN THE HOUSE</div>
+      <div style="display:flex;gap:8px;margin-top:3px;">
+        <div id="hud-mode">MODE: <span id="modeLabel" style="color:#00ff41">-</span></div>
+        <div id="hud-obj">OBJ: <span id="objLabel" style="color:#00ff41">-</span></div>
+      </div>
+    </div>
+    <div style="text-align:center">
+      <div id="hud-timer">--:--</div>
+      <div style="color:#aaa;font-size:6px;margin-top:2px">TIME LEFT</div>
+    </div>
+    <div id="hud-right">
+      <div id="hud-floor">FLOOR: 1</div>
+      <div style="color:#aaa;font-size:6px">HEALTH:</div>
+      <div id="hud-health">
+        <span class="heart full" id="h1">❤️</span>
+        <span class="heart full" id="h2">❤️</span>
+        <span class="heart full" id="h3">❤️</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3D VIEW -->
+  <div id="viewArea">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Motion badge -->
+    <div id="motionBadge" id="motionBadge">
+      <div id="mb-compass">🧭 ---°</div>
+      <div id="mb-steps">👟 0 steps</div>
+      <div id="mb-accel">📳 --</div>
+    </div>
+
+    <!-- Alert -->
+    <div id="alertBanner"><span style="font-size:13px">👻</span><span id="alertText">GHOST IS NEAR!</span></div>
+
+    <!-- Door status -->
+    <div id="doorStatus"><span>🔒</span><span id="doorStatusText">DOOR LOCKED</span></div>
+
+    <!-- ══ MODE SELECT ══ -->
+    <div class="overlay" id="modeSelectOverlay">
+      <h1>👻 GHOST IN THE HOUSE</h1>
+      <p>A real-world ghost hunt.<br>Walk your house. Evade the ghost.</p>
+      <button class="mode-btn" onclick="startSolo()">⚡ SOLO GAME<span>Walk alone. Evade the AI ghost for 2 minutes.</span></button>
+      <button class="mode-btn" onclick="startGhostPhone()">👻 GHOST PHONE<span>You ARE the ghost. Map house, hide phone, wait to be found.</span></button>
+      <button class="mode-btn" onclick="checkHunterURL()">🔦 HUNTER MODE<span>Hunt the ghost phone hidden in your house.</span></button>
+    </div>
+
+    <!-- ══ SCAN OVERLAY ══ -->
+    <div class="overlay" id="scanOverlay" style="display:none">
+      <h2 id="scanTitle">SCANNING HOUSE...</h2>
+      <div id="scanCountdown">30</div>
+      <div id="scanProgress"><div id="scanBar"></div></div>
+      <p id="scanInstructions">Walk around every room of your house.<br>The game is mapping your home using<br>your movement &amp; compass.<br><br>🚶 Just walk — no tapping needed!</p>
+    </div>
+
+    <!-- ══ GHOST HIDE SCREEN ══ -->
+    <div class="overlay" id="ghostHideOverlay">
+      <h2>👻 GHOST IS HIDING!</h2>
+      <p>Place this phone somewhere hidden<br>in your house.<br><br>Send the link below to the hunter.<br>They must physically find this phone!</p>
+      <button id="shareBtn" onclick="shareGhostLink()">📤 SHARE HUNT LINK</button>
+      <div id="ghostRoomCode" style="color:#888;font-size:6px;text-align:center;margin-top:4px;line-height:2"></div>
+      <p style="margin-top:8px;font-size:6px;color:#555">When the hunter finds this phone,<br>press the button below:</p>
+      <button id="foundBtn" onclick="ghostFoundPressed()">🛑 I'VE BEEN FOUND!<br>TAP TO END GAME</button>
+    </div>
+
+    <!-- ══ GAME OVER ══ -->
+    <div class="overlay" id="gameOverOverlay" style="display:none">
+      <div id="gameOverTitle" class="caught">YOU HAVE BEEN<br>CAUGHT!</div>
+      <div id="gameOverMsg">The ghost caught you...</div>
+      <button id="restartBtn" onclick="restartGame()">▶ PLAY AGAIN</button>
+    </div>
+
+    <!-- ══ SENSOR PERMISSION ══ -->
+    <div id="permOverlay">
+      <h3>📱 MOTION SENSORS</h3>
+      <p>This game uses your phone's movement to control your character.<br><br>Please allow motion &amp; orientation access.</p>
+      <button id="permBtn" onclick="requestSensorPermission()">✅ ALLOW MOTION</button>
+      <p style="font-size:5px;color:#444;margin-top:8px">iOS 13+: Tap allow on the popup.<br>Android: Permission granted automatically.</p>
+    </div>
+  </div>
+
+  <!-- BOTTOM PANEL (no dpad) -->
+  <div id="bottomPanel">
+    <!-- Motion status -->
+    <div id="motionPanel">
+      <div id="compassRose">
+        <div id="compassNeedle"></div>
+        <div id="compassSouth"></div>
+        <span class="compass-label n">N</span>
+        <span class="compass-label s">S</span>
+        <span class="compass-label e">E</span>
+        <span class="compass-label w">W</span>
+      </div>
+      <div id="motionStatus">STAND STILL</div>
+      <div id="stepCounter">0</div>
+      <div id="stepLabel">STEPS</div>
+    </div>
+    <!-- Mini map -->
+    <div id="miniMapArea">
+      <div id="miniMapLabel">MAP - FLOOR <span id="floorLabel">1</span></div>
+      <canvas id="miniMapCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Tip bar -->
+  <div id="tipBar">
+    <div id="tipText"><span>💡</span><span id="tipMsg">CHOOSE A GAME MODE ABOVE</span></div>
+    <button id="doorLockBtn" onclick="toggleDoorLock()">🔒 LOCK</button>
+  </div>
+
+</div>
+
+<script>
+// ╔══════════════════════════════════════════════════════════════╗
+//  GHOST IN THE HOUSE V4
+//  • Physical step detection (DeviceMotion accelerometer)
+//  • Compass heading (DeviceOrientation)
+//  • Fog of war (map revealed as you walk)
+//  • Solo AI mode + Multiplayer Ghost Hunt mode
+// ╚══════════════════════════════════════════════════════════════╝
+
+const canvas  = document.getElementById("gameCanvas");
+const ctx     = canvas.getContext("2d");
+const mmCanvas = document.getElementById("miniMapCanvas");
+const mmCtx   = mmCanvas.getContext("2d");
+
+function resizeCanvases() {
+  const vArea = document.getElementById("viewArea");
+  canvas.width  = vArea.clientWidth;
+  canvas.height = vArea.clientHeight;
+  const mmArea  = document.getElementById("miniMapArea");
+  mmCanvas.width  = mmArea.clientWidth  - 12;
+  mmCanvas.height = mmArea.clientHeight - 24;
+}
+window.addEventListener("resize", resizeCanvases);
+resizeCanvases();
+
+// ══════════════════════════════════════════════════════════════
+//  MAP  (1=wall  0=floor  2=door  3=stairs)
+// ══════════════════════════════════════════════════════════════
+let map = [
+  [1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,1,0,0,0,0,0,0,1],
+  [1,0,0,0,2,0,0,0,0,0,0,1],
+  [1,0,0,0,1,0,0,1,0,0,0,1],
+  [1,1,2,1,1,0,0,1,0,0,0,1],
+  [1,0,0,0,0,0,0,2,0,0,0,1],
+  [1,0,0,0,0,0,0,1,1,1,2,1],
+  [1,0,0,3,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1]
+];
+
+// ── FOG OF WAR ──
+// revealed[y][x] = true when player has seen that cell
+let revealed = map.map(row => row.map(() => false));
+
+function revealAround(px, py, radius) {
+  let mx = Math.floor(px), my = Math.floor(py);
+  let r = Math.ceil(radius);
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      let nx = mx + dx, ny = my + dy;
+      if (ny >= 0 && ny < map.length && nx >= 0 && nx < map[0].length) {
+        if (Math.hypot(dx, dy) <= radius) revealed[ny][nx] = true;
+      }
+    }
+  }
+}
+
+// ── DOOR STATE ──
+let doors = {};
+for (let y=0;y<map.length;y++)
+  for (let x=0;x<map[y].length;x++)
+    if (map[y][x] === 2) doors[`${x}_${y}`] = "open";
+
+let nearDoor = null, doorLockTimer = 0;
+
+function isWall(x, y) {
+  let mx=Math.floor(x), my=Math.floor(y);
+  if (my<0||my>=map.length||mx<0||mx>=map[0].length) return true;
+  let v=map[my][mx];
+  return v===1 || (v===2 && doors[`${mx}_${my}`]==="locked");
+}
+function isWallSolid(x,y) {
+  let mx=Math.floor(x), my=Math.floor(y);
+  if (my<0||my>=map.length||mx<0||mx>=map[0].length) return true;
+  return map[my][mx]===1;
+}
+
+function toggleDoorLock() {
+  if (!nearDoor) return;
+  let key=`${nearDoor.x}_${nearDoor.y}`;
+  if (doors[key]==="locked") { doors[key]="open"; showDoorStatus("DOOR UNLOCKED",1500); showTip("DOOR UNLOCKED!"); }
+  else { doors[key]="locked"; showDoorStatus("DOOR LOCKED",1500); showTip("DOOR LOCKED! Ghost slowed."); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  PLAYER
+// ══════════════════════════════════════════════════════════════
+let player = { x:1.5, y:1.5, angle:0, health:3, floor:0 };
+
+// ══════════════════════════════════════════════════════════════
+//  GHOST
+// ══════════════════════════════════════════════════════════════
+let ghost = { x:9.5, y:7.0, floor:0, visible:false };
+let ghostAI  = { memory:[], mode:"hunt", modeTimer:0 };
+let ghostMind = { visits:{}, lingerZones:[], sleepGuess:null };
+
+// ══════════════════════════════════════════════════════════════
+//  PHYSICAL MOTION SYSTEM
+// ══════════════════════════════════════════════════════════════
+let motion = {
+  // Compass
+  heading:      0,      // radians, smoothed
+  rawAlpha:     null,
+  compassReady: false,
+
+  // Step detection
+  stepCount:    0,
+  stepPending:  false,   // a step was detected — apply next frame
+  lastStepTime: 0,
+  stepCooldown: 380,     // ms min between steps
+
+  // Accelerometer filtering
+  gravity:  { x:0, y:0, z:9.81 },
+  prevMag:  0,
+  highPass: 0,
+  isMoving: false,
+  movingTimer: 0,
+
+  // Settings
+  stepThreshold: 10.5,   // m/s² peak to count as step (adjust per device)
+  stepSize:      0.10,   // world units per step
+  smoothAlpha:   0.15,   // compass smoothing
+};
+
+let totalSteps = 0;
+
+// ── Compass / Orientation ──
+function initCompass() {
+  window.addEventListener("deviceorientation", e => {
+    // webkitCompassHeading is clockwise from North on iOS
+    // e.alpha is counter-clockwise on Android — we normalise both
+    let deg = null;
+    if (e.webkitCompassHeading !== undefined && e.webkitCompassHeading !== null) {
+      deg = e.webkitCompassHeading;  // iOS: already North-clockwise degrees
+    } else if (e.alpha !== null) {
+      deg = (360 - e.alpha) % 360;   // Android: convert to same convention
+    }
+    if (deg === null) return;
+
+    motion.compassReady = true;
+    let target = deg * Math.PI / 180;
+
+    // Shortest-angle smooth
+    let diff = target - motion.heading;
+    while (diff >  Math.PI) diff -= 2*Math.PI;
+    while (diff < -Math.PI) diff += 2*Math.PI;
+    motion.heading += diff * motion.smoothAlpha;
+
+    player.angle = motion.heading;
+    updateCompassUI(deg);
+  }, true);
+}
+
+function updateCompassUI(deg) {
+  // Rotate needle so red points North
+  document.getElementById("compassNeedle").style.transform =
+    `translateX(-50%) rotate(${deg}deg)`;
+  document.getElementById("compassSouth").style.transform =
+    `translateX(-50%) rotate(${deg}deg)`;
+  let dirs = ["N","NE","E","SE","S","SW","W","NW"];
+  let label = dirs[Math.round(deg/45) % 8];
+  document.getElementById("mb-compass").textContent = `🧭 ${Math.round(deg)}° ${label}`;
+  document.getElementById("motionBadge").classList.add("active");
+}
+
+// ── Step Detection ──
+function initAccelerometer() {
+  window.addEventListener("devicemotion", e => {
+    let acc = e.accelerationIncludingGravity;
+    if (!acc || acc.x === null) return;
+
+    // Low-pass filter for gravity estimate
+    let alpha = 0.85;
+    motion.gravity.x = alpha * motion.gravity.x + (1-alpha) * acc.x;
+    motion.gravity.y = alpha * motion.gravity.y + (1-alpha) * acc.y;
+    motion.gravity.z = alpha * motion.gravity.z + (1-alpha) * acc.z;
+
+    // High-pass (linear acceleration only)
+    let lax = acc.x - motion.gravity.x;
+    let lay = acc.y - motion.gravity.y;
+    let laz = acc.z - motion.gravity.z;
+
+    let mag = Math.sqrt(lax*lax + lay*lay + laz*laz);
+
+    // Step detection: rising edge above threshold
+    let now = Date.now();
+    if (motion.prevMag < motion.stepThreshold && mag >= motion.stepThreshold &&
+        now - motion.lastStepTime > motion.stepCooldown) {
+      motion.stepPending = true;
+      motion.lastStepTime = now;
+      motion.isMoving = true;
+      motion.movingTimer = 800; // ms
+    }
+
+    motion.prevMag = mag;
+    document.getElementById("mb-accel").textContent = `📳 ${mag.toFixed(1)}`;
+  }, true);
+}
+
+// Apply pending step in game loop (thread-safe)
+function applyPhysicalStep() {
+  if (!motion.stepPending) return;
+  motion.stepPending = false;
+
+  totalSteps++;
+  motion.stepCount++;
+  document.getElementById("stepCounter").textContent = totalSteps;
+  document.getElementById("mb-steps").textContent = `👟 ${totalSteps} steps`;
+
+  let nx = player.x + Math.cos(player.angle) * motion.stepSize;
+  let ny = player.y + Math.sin(player.angle) * motion.stepSize;
+
+  if (!isWall(nx, player.y)) player.x = nx;
+  if (!isWall(player.x, ny)) player.y = ny;
+}
+
+// ── Keyboard fallback (desktop testing) ──
+let keys = { up:false, down:false, left:false, right:false };
+document.addEventListener("keydown", e => {
+  if (e.key==="ArrowUp"   ||e.key==="w") keys.up    = true;
+  if (e.key==="ArrowDown" ||e.key==="s") keys.down  = true;
+  if (e.key==="ArrowLeft" ||e.key==="a") keys.left  = true;
+  if (e.key==="ArrowRight"||e.key==="d") keys.right = true;
+});
+document.addEventListener("keyup", e => {
+  if (e.key==="ArrowUp"   ||e.key==="w") keys.up    = false;
+  if (e.key==="ArrowDown" ||e.key==="s") keys.down  = false;
+  if (e.key==="ArrowLeft" ||e.key==="a") keys.left  = false;
+  if (e.key==="ArrowRight"||e.key==="d") keys.right = false;
+});
+
+function applyKeyboardFallback(dt) {
+  const speed = 0.05, turn = 0.05;
+  if (keys.left)  player.angle -= turn;
+  if (keys.right) player.angle += turn;
+  let nx=player.x, ny=player.y;
+  if (keys.up)   { nx+=Math.cos(player.angle)*speed; ny+=Math.sin(player.angle)*speed; }
+  if (keys.down) { nx-=Math.cos(player.angle)*speed; ny-=Math.sin(player.angle)*speed; }
+  if (!isWall(nx,player.y)) player.x=nx;
+  if (!isWall(player.x,ny)) player.y=ny;
+  if (keys.up||keys.down) { motion.isMoving=true; motion.movingTimer=300; }
+}
+
+// Swipe to turn (when compass unavailable)
+let touchStartX=0;
+canvas.addEventListener("touchstart", e=>{ touchStartX=e.touches[0].clientX; }, {passive:true});
+canvas.addEventListener("touchmove", e=>{
+  if (!motion.compassReady) {
+    let dx=e.touches[0].clientX-touchStartX;
+    player.angle += dx*0.003;
+    touchStartX=e.touches[0].clientX;
+  }
+}, {passive:true});
+
+// Double-tap door lock
+let lastTap=0;
+canvas.addEventListener("touchend", e=>{
+  let now=Date.now();
+  if (now-lastTap<300) { toggleDoorLock(); e.preventDefault(); }
+  lastTap=now;
+}, {passive:false});
+
+// ══════════════════════════════════════════════════════════════
+//  SENSOR PERMISSION (iOS 13+)
+// ══════════════════════════════════════════════════════════════
+let sensorsInitialised = false;
+
+function requestSensorPermission() {
+  document.getElementById("permOverlay").classList.remove("show");
+
+  let promises = [];
+  if (typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function") {
+    promises.push(DeviceOrientationEvent.requestPermission());
+  }
+  if (typeof DeviceMotionEvent !== "undefined" &&
+      typeof DeviceMotionEvent.requestPermission === "function") {
+    promises.push(DeviceMotionEvent.requestPermission());
+  }
+
+  Promise.all(promises).then(() => {
+    initCompass();
+    initAccelerometer();
+    sensorsInitialised = true;
+    showTip("SENSORS ACTIVE — WALK TO MOVE!");
+  }).catch(() => {
+    // Permission denied — fall back to keyboard
+    sensorsInitialised = true;
+    showTip("Motion denied. Use arrow keys.");
+  });
+}
+
+function trySensorsAutomatic() {
+  // Android / non-iOS doesn't require explicit permission
+  if (typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission !== "function") {
+    initCompass();
+    initAccelerometer();
+    sensorsInitialised = true;
+    return true;
+  }
+  return false;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GAME STATE
+// ══════════════════════════════════════════════════════════════
+let gameMode    = "menu";   // menu | scan | play | ghostHide | hunter | over
+let playSubMode = "solo";   // solo | hunter
+let scanTime  = 30;
+let gameTime  = 120;
+let lastTime  = 0;
+
+let difficulty = { speed:0.012, aggression:0.3, startTime:Date.now() };
+
+// Movement state for scan-mode mapping
+let movState = { lastX:1.5, lastY:1.5, paused:false, pauseStart:0 };
+
+// ══════════════════════════════════════════════════════════════
+//  MODE LAUNCH FUNCTIONS
+// ══════════════════════════════════════════════════════════════
+function startSolo() {
+  playSubMode = "solo";
+  hideModeSelect();
+  checkAndRequestSensors(() => beginScan("solo"));
+}
+
+function startGhostPhone() {
+  playSubMode = "ghost";
+  hideModeSelect();
+  checkAndRequestSensors(() => beginScan("ghost"));
+}
+
+function checkHunterURL() {
+  // Check URL hash for encoded map from ghost phone
+  let hash = window.location.hash;
+  if (hash.includes("ghostmap=")) {
+    let encoded = hash.split("ghostmap=")[1];
+    try {
+      let data = JSON.parse(atob(decodeURIComponent(encoded)));
+      map = data.map;
+      // Re-init doors
+      doors = {};
+      for (let y=0;y<map.length;y++)
+        for (let x=0;x<map[y].length;x++)
+          if (map[y][x]===2) doors[`${x}_${y}`]="open";
+      // Reset fog
+      revealed = map.map(row=>row.map(()=>false));
+      // Set ghost static position (ghost phone's last known pos)
+      if (data.ghostPos) { ghost.x=data.ghostPos.x; ghost.y=data.ghostPos.y; }
+      playSubMode = "hunter";
+      hideModeSelect();
+      checkAndRequestSensors(() => beginHunter());
+      return;
+    } catch(e) { /* fall through */ }
+  }
+  // No URL data — show instructions
+  alert("No ghost link found!\n\nAsk the ghost phone player to share their hunt link with you, then open it on this phone.");
+}
+
+function hideModeSelect() {
+  document.getElementById("modeSelectOverlay").style.display="none";
+}
+
+function checkAndRequestSensors(cb) {
+  if (sensorsInitialised) { cb(); return; }
+  if (trySensorsAutomatic()) { cb(); return; }
+  // iOS needs permission tap
+  let perm = document.getElementById("permOverlay");
+  perm.classList.add("show");
+  document.getElementById("permBtn").onclick = () => {
+    requestSensorPermission();
+    setTimeout(cb, 500);
+  };
+}
+
+// ── Begin Scan Mode ──
+function beginScan(submode) {
+  gameMode = "scan";
+  playSubMode = submode;
+  scanTime = 30;
+
+  let overlay = document.getElementById("scanOverlay");
+  overlay.style.display = "flex";
+
+  if (submode === "ghost") {
+    document.getElementById("scanTitle").textContent = "👻 GHOST IS MAPPING...";
+    document.getElementById("scanInstructions").innerHTML =
+      "Walk every room of the house.<br>You are mapping it for the hunter.<br><br>🚶 Just walk — no tapping!";
+    document.getElementById("modeLabel").textContent = "GHOST";
+    document.getElementById("objLabel").textContent = "MAP HOUSE";
+  } else {
+    document.getElementById("scanTitle").textContent = "SCANNING HOUSE...";
+    document.getElementById("scanInstructions").innerHTML =
+      "Walk around every room of your house.<br>Mapping via movement &amp; compass.<br><br>🚶 Just walk — no tapping needed!";
+    document.getElementById("modeLabel").textContent = "SCAN";
+    document.getElementById("objLabel").textContent = "SCAN HOUSE";
+  }
+
+  showTip("WALK AROUND YOUR HOUSE TO MAP IT!");
+  difficulty.startTime = Date.now();
+  requestAnimationFrame(ts => { lastTime=ts; requestAnimationFrame(loop); });
+}
+
+// ── Begin Hunter Mode (no scan needed — map comes from URL) ──
+function beginHunter() {
+  gameMode = "play";
+  playSubMode = "hunter";
+  // ghost position is already set from URL
+  // Reveal a small area to start
+  revealAround(player.x, player.y, 2.5);
+  document.getElementById("scanOverlay").style.display="none";
+  document.getElementById("modeLabel").textContent = "HUNTER";
+  document.getElementById("objLabel").textContent = "FIND GHOST PHONE";
+  showTip("HUNT THE GHOST PHONE! Find it to win!");
+  difficulty.startTime = Date.now();
+  requestAnimationFrame(ts => { lastTime=ts; requestAnimationFrame(loop); });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GHOST HUNT MULTIPLAYER
+// ══════════════════════════════════════════════════════════════
+
+// Ghost phone: after scan, show hide screen
+function enterGhostHideMode() {
+  gameMode = "ghostHide";
+  document.getElementById("scanOverlay").style.display="none";
+  document.getElementById("ghostHideOverlay").classList.add("show");
+
+  // Generate shareable URL with encoded map
+  let data = {
+    map: map,
+    ghostPos: { x: player.x, y: player.y }
+  };
+  let encoded = encodeURIComponent(btoa(JSON.stringify(data)));
+  let shareURL = window.location.href.split("#")[0] + "#ghostmap=" + encoded;
+  window._ghostShareURL = shareURL;
+
+  // Show short room code (last 6 chars of encoded)
+  let code = encoded.slice(-6).toUpperCase();
+  document.getElementById("ghostRoomCode").innerHTML =
+    `Room code: <b style="color:#ffff00">${code}</b><br>` +
+    `<span style="color:#333;font-size:5px">or share the link below</span>`;
+
+  showTip("HIDE THIS PHONE SOMEWHERE IN THE HOUSE!");
+}
+
+function shareGhostLink() {
+  if (!window._ghostShareURL) return;
+  if (navigator.share) {
+    navigator.share({
+      title: "Ghost In The House — Hunt me!",
+      text: "I'm hiding in the house. Come find me!",
+      url: window._ghostShareURL
+    }).catch(()=>{
+      copyToClipboard(window._ghostShareURL);
+    });
+  } else {
+    copyToClipboard(window._ghostShareURL);
+    showTip("LINK COPIED! Send to the hunter.");
+  }
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text);
+  } else {
+    let ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
+  alert("Hunt link copied!\nSend it to the hunter phone.");
+}
+
+// Ghost phone: player presses "I've been found"
+function ghostFoundPressed() {
+  document.getElementById("ghostHideOverlay").classList.remove("show");
+  let overlay = document.getElementById("gameOverOverlay");
+  let title   = document.getElementById("gameOverTitle");
+  let msg     = document.getElementById("gameOverMsg");
+  overlay.style.display="flex";
+  title.className="caught";
+  title.innerHTML="GHOST FOUND!<br>YOU'VE BEEN CAUGHT!";
+  msg.textContent = "The hunter found your hiding spot!";
+  gameMode = "over";
+}
+
+// Hunter wins by getting within 1.5 units of ghost's position
+function checkHunterWin() {
+  let d = Math.hypot(player.x-ghost.x, player.y-ghost.y);
+  if (d < 1.5) {
+    endGame(true, "hunter");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GHOST AI
+// ══════════════════════════════════════════════════════════════
+function predictPlayerNode() {
+  ghostAI.memory.push({x:player.x,y:player.y});
+  if (ghostAI.memory.length>12) ghostAI.memory.shift();
+  if (ghostAI.memory.length<2) return null;
+  let dx=ghostAI.memory[ghostAI.memory.length-1].x-ghostAI.memory[0].x;
+  let dy=ghostAI.memory[ghostAI.memory.length-1].y-ghostAI.memory[0].y;
+  return {x:player.x+dx*2.5, y:player.y+dy*2.5};
+}
+
+function hasLOS(ax,ay,bx,by) {
+  let steps=16;
+  for (let i=1;i<steps;i++) {
+    let t=i/steps;
+    if (isWall(ax+(bx-ax)*t, ay+(by-ay)*t)) return false;
+  }
+  return true;
+}
+
+function recordHabits() {
+  let k=`${Math.floor(player.x)}_${Math.floor(player.y)}`;
+  ghostMind.visits[k]=(ghostMind.visits[k]||0)+1;
+  if (ghostMind.visits[k]>180 && !ghostMind.lingerZones.includes(k))
+    ghostMind.lingerZones.push(k);
+  let ks=Object.keys(ghostMind.visits);
+  if (ks.length) {
+    let best=ks[0];
+    for (let kk of ks) if (ghostMind.visits[kk]>ghostMind.visits[best]) best=kk;
+    ghostMind.sleepGuess=best;
+  }
+}
+
+function chooseTarget() {
+  let r=Math.random();
+  if (r<0.5) return {x:player.x,y:player.y};
+  if (r<0.75&&ghostMind.lingerZones.length) {
+    let z=ghostMind.lingerZones[Math.floor(Math.random()*ghostMind.lingerZones.length)];
+    let [x,y]=z.split("_"); return {x:+x+0.5,y:+y+0.5};
+  }
+  if (ghostMind.sleepGuess) {
+    let [x,y]=ghostMind.sleepGuess.split("_"); return {x:+x+0.5,y:+y+0.5};
+  }
+  return {x:player.x,y:player.y};
+}
+
+function updateGhost(dt) {
+  if (ghost.floor!==player.floor) return;
+  let dist=Math.hypot(player.x-ghost.x, player.y-ghost.y);
+  let canSee=hasLOS(ghost.x,ghost.y,player.x,player.y);
+
+  ghostAI.modeTimer-=dt;
+  if (ghostAI.modeTimer<=0) {
+    if (dist<2.5) ghostAI.mode="hunt";
+    else if (Math.random()<difficulty.aggression) ghostAI.mode="intercept";
+    else if (Math.random()<0.2) ghostAI.mode="hide";
+    else ghostAI.mode="hunt";
+    ghostAI.modeTimer=1500+Math.random()*2000;
+  }
+  if (!canSee && ghostAI.mode==="hunt") ghostAI.mode="intercept";
+
+  let target;
+  if (ghostAI.mode==="hunt") target={x:player.x,y:player.y};
+  else if (ghostAI.mode==="intercept") target=predictPlayerNode()||{x:player.x,y:player.y};
+  else target=chooseTarget();
+
+  let tdx=target.x-ghost.x, tdy=target.y-ghost.y;
+  let td=Math.hypot(tdx,tdy);
+  if (td<0.01) return;
+
+  let spd=difficulty.speed*(dt/16);
+  let nx=ghost.x+(tdx/td)*spd, ny=ghost.y+(tdy/td)*spd;
+  if (!isWallSolid(nx,ghost.y)) ghost.x=nx;
+  if (!isWallSolid(ghost.x,ny)) ghost.y=ny;
+  ghost.visible=canSee&&dist<10;
+}
+
+function updateDifficulty() {
+  let t=(Date.now()-difficulty.startTime)/1000;
+  difficulty.speed=0.012+t*0.00015;
+  difficulty.aggression=Math.min(0.9,0.3+t/90);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DOOR PROXIMITY
+// ══════════════════════════════════════════════════════════════
+function checkDoorProximity() {
+  nearDoor=null;
+  for (let y=0;y<map.length;y++)
+    for (let x=0;x<map[y].length;x++)
+      if (map[y][x]===2) {
+        let d=Math.hypot(player.x-(x+0.5),player.y-(y+0.5));
+        if (d<1.0) { nearDoor={x,y}; return; }
+      }
+}
+
+function updateDoorLock(dt) {
+  if (!nearDoor) { doorLockTimer=0; return; }
+  let moving=motion.isMoving || keys.up || keys.down;
+  if (!moving) {
+    doorLockTimer+=dt;
+    if (doorLockTimer>=2000) { toggleDoorLock(); doorLockTimer=0; }
+  } else { doorLockTimer=0; }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MAPPING STATE (scan mode)
+// ══════════════════════════════════════════════════════════════
+function updateMappingState() {
+  let dx=player.x-movState.lastX, dy=player.y-movState.lastY;
+  let dist=Math.hypot(dx,dy);
+  if (dist<0.02) {
+    if (!movState.paused) { movState.paused=true; movState.pauseStart=Date.now(); }
+  } else { movState.paused=false; }
+  if (dist>0.25) { movState.lastX=player.x; movState.lastY=player.y; }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RAYCASTER
+// ══════════════════════════════════════════════════════════════
+function castRay(angle) {
+  let x=player.x, y=player.y;
+  let cos=Math.cos(angle), sin=Math.sin(angle);
+  for (let i=0.05;i<18;i+=0.04) {
+    let nx=x+cos*i, ny=y+sin*i;
+    let mx=Math.floor(nx), my=Math.floor(ny);
+    if (my<0||my>=map.length||mx<0||mx>=map[0].length)
+      return {dist:i,type:1,side:0,mx,my};
+    let v=map[my][mx];
+    if (v===1||(v===2&&doors[`${mx}_${my}`]==="locked")) {
+      let px=x+cos*(i-0.04), py=y+sin*(i-0.04);
+      let side=(Math.floor(px)!==mx)?1:0;
+      return {dist:i,type:v,side,mx,my};
+    }
+    if (v===2) return {dist:i,type:2,side:0,mx,my,open:true};
+    if (v===3) return {dist:i,type:3,side:0,mx,my};
+  }
+  return {dist:18,type:0,side:0};
+}
+
+function wallColor(type,dist,side,mx,my) {
+  let r,g,b;
+  if (type===2)      { r=100;g=60;b=20; }
+  else if (type===3) { r=80;g=80;b=80; }
+  else               { r=120;g=110;b=70; if((mx+my)%2===0){r-=10;g-=8;} }
+  let shade=Math.max(0,1-dist/10);
+  if (side===1) shade*=0.72;
+  return `rgb(${Math.floor(r*shade)},${Math.floor(g*shade)},${Math.floor(b*shade)})`;
+}
+
+function drawFloorCeiling() {
+  let grad=ctx.createLinearGradient(0,0,0,canvas.height/2);
+  grad.addColorStop(0,"#1a1a1a"); grad.addColorStop(1,"#2d2d2d");
+  ctx.fillStyle=grad; ctx.fillRect(0,0,canvas.width,canvas.height/2);
+
+  let fgrad=ctx.createLinearGradient(0,canvas.height/2,0,canvas.height);
+  fgrad.addColorStop(0,"#3a2a10"); fgrad.addColorStop(1,"#1a1005");
+  ctx.fillStyle=fgrad; ctx.fillRect(0,canvas.height/2,canvas.width,canvas.height/2);
+
+  ctx.strokeStyle="rgba(80,50,10,0.25)"; ctx.lineWidth=1;
+  for (let i=0;i<8;i++) {
+    let yy=canvas.height/2+(canvas.height/2)*(i/8);
+    ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(canvas.width,yy); ctx.stroke();
+  }
+}
+
+function render3D() {
+  drawFloorCeiling();
+  const rays=Math.min(canvas.width,180), fov=Math.PI/3, stripW=canvas.width/rays;
+  let ghostRayInfo=null;
+
+  for (let i=0;i<rays;i++) {
+    let ra=player.angle-fov/2+(i/rays)*fov;
+    let hit=castRay(ra);
+    if (hit.open) continue;
+    let cd=hit.dist*Math.cos(ra-player.angle);
+    let wh=(canvas.height/cd)*1.4;
+    let wt=canvas.height/2-wh/2;
+
+    ctx.fillStyle=wallColor(hit.type,cd,hit.side,hit.mx,hit.my);
+    ctx.fillRect(i*stripW,wt,stripW+1,wh);
+
+    let sk=wh*0.08;
+    ctx.fillStyle=`rgba(30,15,5,${Math.max(0,1-cd/8)})`;
+    ctx.fillRect(i*stripW,wt+wh-sk,stripW+1,sk);
+
+    if (hit.type===2) {
+      ctx.fillStyle=`rgba(60,30,10,${Math.max(0,0.6-cd/10)})`;
+      ctx.fillRect(i*stripW,wt,stripW+1,wh*0.1);
+      ctx.fillRect(i*stripW,wt+wh-wh*0.1,stripW+1,wh*0.1);
+    }
+
+    if (ghost.visible&&ghost.floor===player.floor) {
+      let ga=Math.atan2(ghost.y-player.y,ghost.x-player.x);
+      let diff=ga-player.angle;
+      while(diff>Math.PI) diff-=Math.PI*2;
+      while(diff<-Math.PI) diff+=Math.PI*2;
+      let gsx=(diff/fov+0.5)*canvas.width;
+      let gd=Math.hypot(ghost.x-player.x,ghost.y-player.y);
+      if (gd<hit.dist&&Math.abs(diff)<fov/2) ghostRayInfo={sx:gsx,dist:gd};
+    }
+  }
+  if (ghostRayInfo) drawGhost3D(ghostRayInfo.sx,ghostRayInfo.dist);
+
+  // Crosshair
+  ctx.strokeStyle="rgba(255,255,255,0.55)"; ctx.lineWidth=1.5;
+  let cx=canvas.width/2, cy=canvas.height/2;
+  ctx.beginPath(); ctx.moveTo(cx-8,cy); ctx.lineTo(cx+8,cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,cy-8); ctx.lineTo(cx,cy+8); ctx.stroke();
+}
+
+function drawGhost3D(sx,dist) {
+  let size=Math.min(canvas.height*0.6,(canvas.height/dist)*1.2);
+  let x=sx-size/2, y=canvas.height/2-size/2-size*0.05;
+  ctx.save();
+  ctx.globalAlpha=Math.min(1,1.2-dist/10);
+  let p=0.92+Math.sin(Date.now()*0.005)*0.08;
+  ctx.fillStyle=`rgba(${Math.floor(220*p)},${Math.floor(220*p)},${Math.floor(220*p)},0.92)`;
+  ctx.beginPath(); ctx.ellipse(x+size/2,y+size*0.35,size*0.38,size*0.4,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x+size*0.12,y+size*0.65);
+  let wave=Math.sin(Date.now()*0.006);
+  for (let i=0;i<=4;i++) {
+    ctx.lineTo(x+(i/4)*size*0.76+size*0.12, y+size*0.75+Math.sin((i+wave*2)*1.5)*size*0.07);
+  }
+  ctx.lineTo(x+size*0.12,y+size*0.65); ctx.fill();
+  let es=size*0.09;
+  ctx.fillStyle="#ff0000";
+  ctx.beginPath(); ctx.arc(x+size*0.36,y+size*0.3,es,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+size*0.64,y+size*0.3,es,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#ff6666";
+  ctx.beginPath(); ctx.arc(x+size*0.34,y+size*0.28,es*0.4,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+size*0.62,y+size*0.28,es*0.4,0,Math.PI*2); ctx.fill();
+  let grd=ctx.createRadialGradient(x+size/2,y+size*0.4,0,x+size/2,y+size*0.4,size*0.6);
+  grd.addColorStop(0,"rgba(255,255,255,0.1)"); grd.addColorStop(1,"rgba(255,255,255,0)");
+  ctx.fillStyle=grd; ctx.fillRect(x,y,size,size);
+  ctx.restore();
+}
+
+// ── Hunter ghost phone marker (glowing static ghost) ──
+function drawGhostPhoneMarker3D() {
+  let gAngle=Math.atan2(ghost.y-player.y,ghost.x-player.x);
+  let diff=gAngle-player.angle;
+  while(diff>Math.PI) diff-=Math.PI*2;
+  while(diff<-Math.PI) diff+=Math.PI*2;
+  let fov=Math.PI/3;
+  if (Math.abs(diff)>fov/2) return;
+  let dist=Math.hypot(ghost.x-player.x,ghost.y-player.y);
+  let sx=(diff/fov+0.5)*canvas.width;
+  // Check not behind wall
+  if (!hasLOS(player.x,player.y,ghost.x,ghost.y)) return;
+  // Draw pulsing orb
+  let size=Math.min(80,(canvas.height/dist)*0.8);
+  let x=sx-size/2, y=canvas.height/2-size/2;
+  ctx.save();
+  ctx.globalAlpha=Math.min(0.9,1-dist/12);
+  let pulse=0.7+Math.sin(Date.now()*0.008)*0.3;
+  ctx.fillStyle=`rgba(255,${Math.floor(100*pulse)},0,0.85)`;
+  ctx.beginPath(); ctx.arc(sx,canvas.height/2,size/2,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle="#ffff00"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(sx,canvas.height/2,size/2+4,0,Math.PI*2); ctx.stroke();
+  // Phone icon text
+  ctx.fillStyle="#fff"; ctx.font=`${Math.floor(size*0.4)}px sans-serif`;
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText("📱",sx,canvas.height/2);
+  ctx.restore();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MINI MAP  (with fog of war)
+// ══════════════════════════════════════════════════════════════
+function drawMiniMap() {
+  const W=mmCanvas.width, H=mmCanvas.height;
+  mmCtx.fillStyle="#000"; mmCtx.fillRect(0,0,W,H);
+  const rows=map.length, cols=map[0].length;
+  const cw=W/cols, ch=H/rows;
+
+  for (let y=0;y<rows;y++) {
+    for (let x=0;x<cols;x++) {
+      // Fog of war — only draw if revealed
+      if (!revealed[y][x]) {
+        // small ambient hint if adjacent cell is revealed (edge glow)
+        let adj=false;
+        if (y>0&&revealed[y-1][x]) adj=true;
+        if (y<rows-1&&revealed[y+1][x]) adj=true;
+        if (x>0&&revealed[y][x-1]) adj=true;
+        if (x<cols-1&&revealed[y][x+1]) adj=true;
+        if (adj) { mmCtx.fillStyle="rgba(50,50,50,0.4)"; mmCtx.fillRect(x*cw,y*ch,cw,ch); }
+        continue;
+      }
+
+      let v=map[y][x];
+      if (v===1) {
+        mmCtx.fillStyle="#556"; mmCtx.fillRect(x*cw,y*ch,cw,ch);
+        mmCtx.fillStyle="#445"; mmCtx.fillRect(x*cw+1,y*ch+1,cw-2,ch-2);
+      } else if (v===2) {
+        let locked=doors[`${x}_${y}`]==="locked";
+        mmCtx.fillStyle=locked?"#883300":"#44aa22";
+        mmCtx.fillRect(x*cw+cw*.2,y*ch+ch*.2,cw*.6,ch*.6);
+      } else if (v===3) {
+        mmCtx.fillStyle="#445566"; mmCtx.fillRect(x*cw,y*ch,cw,ch);
+        mmCtx.strokeStyle="#667788"; mmCtx.lineWidth=1;
+        for (let i=1;i<4;i++) {
+          mmCtx.beginPath(); mmCtx.moveTo(x*cw,y*ch+(i/4)*ch);
+          mmCtx.lineTo(x*cw+cw,y*ch+(i/4)*ch); mmCtx.stroke();
+        }
+      } else {
+        mmCtx.fillStyle="#1a1a1a"; mmCtx.fillRect(x*cw,y*ch,cw,ch);
+      }
+    }
+  }
+
+  // Ghost on minimap (solo mode — only if revealed)
+  if (playSubMode==="solo" && ghost.floor===player.floor) {
+    let gmy=Math.floor(ghost.y), gmx=Math.floor(ghost.x);
+    if (revealed[gmy]?.[gmx]) {
+      let gx=ghost.x*cw, gy=ghost.y*ch;
+      mmCtx.fillStyle="#ff2200";
+      mmCtx.beginPath(); mmCtx.arc(gx,gy,Math.max(3,cw*0.4),0,Math.PI*2); mmCtx.fill();
+      if (Math.sin(Date.now()*0.01)>0) {
+        mmCtx.fillStyle="#ff6644";
+        mmCtx.beginPath(); mmCtx.arc(gx,gy,Math.max(1.5,cw*0.2),0,Math.PI*2); mmCtx.fill();
+      }
+    }
+  }
+
+  // Ghost phone position (hunter mode — always shown once close enough)
+  if (playSubMode==="hunter") {
+    let gd=Math.hypot(player.x-ghost.x,player.y-ghost.y);
+    let gmy=Math.floor(ghost.y), gmx=Math.floor(ghost.x);
+    // Show on map if within 4 units
+    if (gd<4 || (revealed[gmy]?.[gmx])) {
+      let gx=ghost.x*cw, gy=ghost.y*ch;
+      mmCtx.font=`${Math.max(8,cw*0.8)}px sans-serif`;
+      mmCtx.textAlign="center"; mmCtx.textBaseline="middle";
+      mmCtx.fillText("📱",gx,gy);
+    }
+  }
+
+  // Player triangle
+  let px=player.x*cw, py=player.y*ch, ts=Math.max(4,cw*0.5);
+  mmCtx.fillStyle="#00ddff";
+  mmCtx.save(); mmCtx.translate(px,py); mmCtx.rotate(player.angle);
+  mmCtx.beginPath(); mmCtx.moveTo(ts,0); mmCtx.lineTo(-ts*.6,-ts*.6); mmCtx.lineTo(-ts*.6,ts*.6);
+  mmCtx.closePath(); mmCtx.fill(); mmCtx.restore();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  HUD UPDATE
+// ══════════════════════════════════════════════════════════════
+function formatTime(s) {
+  let m=Math.floor(s/60),sec=Math.floor(s%60);
+  return `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+}
+
+function updateHUD(dt) {
+  if (gameMode==="scan") {
+    document.getElementById("hud-timer").textContent=formatTime(scanTime);
+    document.getElementById("scanCountdown").textContent=Math.ceil(scanTime);
+    document.getElementById("scanBar").style.width=`${((30-scanTime)/30)*100}%`;
+  } else if (gameMode==="play") {
+    if (playSubMode==="solo") {
+      document.getElementById("hud-timer").textContent=formatTime(gameTime);
+      document.getElementById("hud-timer").classList.toggle("urgent",gameTime<20);
+    } else if (playSubMode==="hunter") {
+      // Show distance to ghost phone
+      let d=Math.hypot(player.x-ghost.x,player.y-ghost.y);
+      document.getElementById("hud-timer").textContent=
+        d<1.5?"FOUND!" : d<3?"HOT 🔥" : d<5?"WARM 🌡" : "COLD 🧊";
+    }
+  }
+  document.getElementById("hud-floor").textContent=`FLOOR: ${player.floor+1}`;
+  document.getElementById("floorLabel").textContent=player.floor+1;
+
+  for (let i=1;i<=3;i++) {
+    let h=document.getElementById(`h${i}`);
+    if (i<=player.health) {h.className="heart full";h.textContent="❤️";}
+    else {h.className="heart empty";h.textContent="🖤";}
+  }
+
+  if (nearDoor) {
+    let locked=doors[`${nearDoor.x}_${nearDoor.y}`]==="locked";
+    showTip(locked?"NEAR DOOR — DOUBLE-TAP TO UNLOCK":"NEAR DOOR — DOUBLE-TAP TO LOCK");
+    document.getElementById("doorLockBtn").textContent=locked?"🔓 UNLOCK":"🔒 LOCK";
+  }
+
+  // Motion status
+  let ms=document.getElementById("motionStatus");
+  if (motion.isMoving) { ms.textContent="MOVING"; ms.className="moving"; }
+  else { ms.textContent="STAND STILL"; ms.className=""; }
+}
+
+// ── Alerts ──
+let alertTimeout=null;
+function showAlert(msg,dur) {
+  let el=document.getElementById("alertBanner");
+  document.getElementById("alertText").textContent=msg;
+  el.classList.add("show");
+  if (alertTimeout) clearTimeout(alertTimeout);
+  alertTimeout=setTimeout(()=>el.classList.remove("show"),dur);
+}
+let doorStatusTimeout=null;
+function showDoorStatus(msg,dur) {
+  let el=document.getElementById("doorStatus");
+  document.getElementById("doorStatusText").textContent=msg;
+  el.classList.add("show");
+  if (doorStatusTimeout) clearTimeout(doorStatusTimeout);
+  doorStatusTimeout=setTimeout(()=>el.classList.remove("show"),dur);
+}
+let tipTimeout=null;
+function showTip(msg) {
+  document.getElementById("tipMsg").textContent=msg;
+  if (tipTimeout) clearTimeout(tipTimeout);
+  tipTimeout=setTimeout(()=>{
+    if (playSubMode==="hunter") document.getElementById("tipMsg").textContent="FIND THE GHOST PHONE!";
+    else document.getElementById("tipMsg").textContent="EVADE THE GHOST FOR 2 MINUTES TO WIN!";
+  },3500);
+}
+
+function checkGhostAlert() {
+  if (playSubMode!=="solo") return;
+  let d=Math.hypot(player.x-ghost.x,player.y-ghost.y);
+  if (ghost.floor===player.floor) {
+    if (d<2.5) showAlert("👻 GHOST IS RIGHT BEHIND YOU!",800);
+    else if (d<4) showAlert("👻 GHOST IS NEAR!",800);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GAME LOOP
+// ══════════════════════════════════════════════════════════════
+function loop(ts) {
+  let dt=ts-lastTime; if(dt>100)dt=100; lastTime=ts;
+
+  // Decay motion flag
+  if (motion.movingTimer>0) { motion.movingTimer-=dt; if(motion.movingTimer<=0){motion.isMoving=false;} }
+
+  // ── SCAN ──
+  if (gameMode==="scan") {
+    applyPhysicalStep();
+    applyKeyboardFallback(dt);
+    updateMappingState();
+    revealAround(player.x, player.y, 2.5);
+
+    scanTime-=dt/1000;
+    if (scanTime<=0) {
+      if (playSubMode==="ghost") {
+        enterGhostHideMode();
+      } else {
+        gameMode="play";
+        document.getElementById("scanOverlay").style.display="none";
+        document.getElementById("modeLabel").textContent="HUNT";
+        document.getElementById("objLabel").textContent="SURVIVE";
+        ghost.x=9.5; ghost.y=7.0;  // Place ghost far away
+        showTip("EVADE THE GHOST FOR 2 MINUTES TO WIN!");
+        difficulty.startTime=Date.now();
+      }
+    }
+  }
+
+  // ── PLAY (solo) ──
+  else if (gameMode==="play" && playSubMode==="solo") {
+    applyPhysicalStep();
+    applyKeyboardFallback(dt);
+    checkDoorProximity();
+    updateDoorLock(dt);
+    recordHabits();
+    updateDifficulty();
+    updateGhost(dt);
+    checkGhostAlert();
+    revealAround(player.x, player.y, 2.5);
+
+    gameTime-=dt/1000;
+    if (gameTime<=0) endGame(true,"solo");
+
+    let d=Math.hypot(player.x-ghost.x,player.y-ghost.y);
+    if (d<0.55&&ghost.floor===player.floor) {
+      player.health--;
+      if (player.health<=0) { endGame(false,"solo"); return; }
+      player.x+=(player.x-ghost.x)*1.5;
+      player.y+=(player.y-ghost.y)*1.5;
+      showAlert("💀 THE GHOST TOUCHED YOU!",1500);
+    }
+  }
+
+  // ── PLAY (hunter) ──
+  else if (gameMode==="play" && playSubMode==="hunter") {
+    applyPhysicalStep();
+    applyKeyboardFallback(dt);
+    checkDoorProximity();
+    updateDoorLock(dt);
+    revealAround(player.x, player.y, 2.5);
+    checkHunterWin();
+
+    let d=Math.hypot(player.x-ghost.x,player.y-ghost.y);
+    if (d<3) showAlert(`📱 PHONE IS ${d<1.5?"HERE!":d<2?"VERY CLOSE!":"CLOSE..."}`,600);
+  }
+
+  updateHUD(dt);
+  render3D();
+
+  // In hunter mode, draw phone orb in 3D view
+  if (gameMode==="play"&&playSubMode==="hunter") drawGhostPhoneMarker3D();
+
+  drawMiniMap();
+
+  if (gameMode!=="over"&&gameMode!=="ghostHide") requestAnimationFrame(loop);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GAME END
+// ══════════════════════════════════════════════════════════════
+function endGame(won, submode) {
+  gameMode="over";
+  let overlay=document.getElementById("gameOverOverlay");
+  let title=document.getElementById("gameOverTitle");
+  let msg=document.getElementById("gameOverMsg");
+  overlay.style.display="flex";
+
+  if (won) {
+    title.className="win";
+    if (submode==="hunter") {
+      title.innerHTML="GHOST FOUND!<br>YOU WIN!";
+      msg.textContent="You found the hidden ghost phone!";
+    } else {
+      title.innerHTML="YOU SURVIVED!<br>GHOST DEFEATED!";
+      msg.textContent="You evaded the ghost for 2 minutes!";
+    }
+  } else {
+    title.className="caught";
+    title.innerHTML="YOU HAVE BEEN<br>CAUGHT!";
+    msg.textContent="The ghost caught you...";
+  }
+}
+
+function restartGame() { location.reload(); }
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+// Try to initialise sensors automatically (Android)
+trySensorsAutomatic();
+
+// Check if we're loading from a ghost hunt URL
+if (window.location.hash.includes("ghostmap=")) {
+  document.getElementById("modeSelectOverlay").style.display="flex";
+  showTip("GHOST HUNT LINK DETECTED — TAP HUNTER MODE!");
+}
+</script>
+</body>
+</html>
