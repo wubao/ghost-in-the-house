@@ -576,6 +576,14 @@ if (motion.prevMag < effectiveThreshold && mag >= effectiveThreshold &&
   }, true);
 }
 
+canvas.addEventListener("touchstart", (e) => {
+  if (gameMode === "play" && !motion.compassReady) {
+    // Only if we have no step detection
+    motion.stepPending = true;
+    e.preventDefault();
+  }
+});
+
 // Apply pending step in game loop (thread-safe)
 function applyPhysicalStep() {
   if (!motion.stepPending) return;
@@ -685,6 +693,77 @@ function trySensorsAutomatic() {
   sensorsInitialised = true;
   return true;
 }
+
+// ══════════════════════════════════════════════════════════════
+//  GPS Fallback
+// ══════════════════════════════════════════════════════════════
+
+// GPS-based step fallback (when accelerometer fails)
+let lastLat = null, lastLon = null;
+let gpsSteps = 0;
+const GPS_STEP_DISTANCE = 2.0; // meters per step
+let gpsWatchId = null;
+
+function startGPSFallback() {
+  if (!navigator.geolocation) return;
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      if (lastLat === null) {
+        lastLat = pos.coords.latitude;
+        lastLon = pos.coords.longitude;
+        return;
+      }
+      const R = 6371000; // Earth radius in meters
+      const dLat = (pos.coords.latitude - lastLat) * Math.PI / 180;
+      const dLon = (pos.coords.longitude - lastLon) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + 
+                Math.cos(lastLat * Math.PI/180) * Math.cos(pos.coords.latitude * Math.PI/180) *
+                Math.sin(dLon/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      const distance = R * c;
+      
+      if (distance > GPS_STEP_DISTANCE) {
+        let stepsToAdd = Math.floor(distance / GPS_STEP_DISTANCE);
+        for (let i = 0; i < stepsToAdd; i++) {
+          motion.stepPending = true;
+          gpsSteps++;
+        }
+        lastLat = pos.coords.latitude;
+        lastLon = pos.coords.longitude;
+        showTip(`GPS step (${gpsSteps})`);
+      }
+    },
+    err => console.warn("GPS error", err),
+    { enableHighAccuracy: true, maximumAge: 500 }
+  );
+}
+
+// Call this after sensors fail
+if (!sensorsInitialised) startGPSFallback();
+
+
+// Native step counter interface (called from Android)
+function addNativeStep() {
+  // Use the same stepPending mechanism as manualStep
+  if (typeof motion !== 'undefined' && motion) {
+    motion.stepPending = true;
+    // Optional: update UI to show it's native
+    if (document.getElementById("mb-accel")) {
+      document.getElementById("mb-accel").style.background = "#003300";
+      setTimeout(() => {
+        if (document.getElementById("mb-accel")) 
+          document.getElementById("mb-accel").style.background = "";
+      }, 100);
+    }
+  }
+  console.log("Native step received");
+}
+
+// Disable the web‑based accelerometer step detection when in native app
+// (but keep compass and orientation – they are fine)
+// Set this flag from Android later if desired
+window.useNativeStepsOnly = false;
+
 
 // ══════════════════════════════════════════════════════════════
 //  GAME STATE
@@ -1428,6 +1507,7 @@ if (window.location.hash.includes("ghostmap=")) {
   document.getElementById("modeSelectOverlay").style.display="flex";
   showTip("GHOST HUNT LINK DETECTED — TAP HUNTER MODE!");
 }
+
 
 function manualStep() {
   motion.stepPending = true;
